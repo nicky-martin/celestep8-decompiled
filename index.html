@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>On Preserving PICO-8 Games: Decompiling the Steganographic Encoding in PNG Images</title>
+<meta property="og:title" content="On Preserving PICO-8 Games"/>
+<meta property="og:description" content="Demonstrating how PICO-8 game data is steganographically stored within PNG cartridge images, with a preservation strategy."/>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto:wght@300;400;500&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #e8e8e8;
+  background-color: #303030;
+}
+
+::selection {
+  background: #ff80a0;
+  color: #222;
+}
+
+a {
+  color: #fbc;
+  text-decoration: none;
+}
+a:hover {
+  color: #ff80a0;
+  text-decoration: underline;
+}
+a:visited {
+  color: #fbc;
+}
+
+/* Top Banner */
+.banner {
+  width: 100%;
+  background: linear-gradient(180deg, #1a0a2e 0%, #0a0014 60%, #000 100%);
+  padding: 40px 20px;
+  text-align: center;
+  border-bottom: 3px solid #ff80a0;
+  position: relative;
+  overflow: hidden;
+}
+
+.banner::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(255, 128, 160, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 30%, rgba(255, 170, 187, 0.05) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+.banner h1 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 700;
+  font-size: 28pt;
+  color: #fff;
+  margin: 0;
+  padding: 0;
+  text-shadow: 0 0 20px rgba(255, 128, 160, 0.4);
+  position: relative;
+  z-index: 1;
+}
+
+.banner .subtitle {
+  color: #ff80a0;
+  font-size: 11pt;
+  margin-top: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.banner .byline {
+  color: #888;
+  font-size: 9pt;
+  margin-top: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Navigation breadcrumb */
+.breadcrumb-bar {
+  background-color: rgba(10, 0, 20, 0.8);
+  padding: 8px 20px;
+  font-size: 9pt;
+  border-bottom: 1px solid #444;
+  text-align: center;
+}
+.breadcrumb-bar a {
+  color: #999;
+  padding: 4px 8px;
+}
+.breadcrumb-bar a:hover {
+  color: #ff80a0;
+}
+.breadcrumb-bar span {
+  color: #666;
+}
+
+/* Main Content */
+.main-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 30px 24px 60px;
+}
+
+h2 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  color: #fff;
+  font-size: 18pt;
+  padding-top: 24px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #555;
+  padding-bottom: 6px;
+}
+
+h3 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  color: #ff80a0;
+  font-size: 14pt;
+  padding-top: 16px;
+  margin-bottom: 4px;
+}
+
+p {
+  margin: 0.6em 0;
+  font-size: 11pt;
+}
+
+em {
+  color: #ffddee;
+  font-style: italic;
+}
+
+strong {
+  color: #fff;
+}
+
+code {
+  background-color: #222;
+  color: #ff80a0;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10pt;
+}
+
+blockquote {
+  border-left: 3px solid #ff80a0;
+  background: rgba(255, 128, 160, 0.05);
+  margin: 1.2em 0;
+  padding: 12px 16px;
+  color: #ddd;
+  font-size: 10.5pt;
+}
+
+blockquote ul {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0.4em 0;
+}
+
+blockquote li {
+  margin: 2px 0;
+}
+
+ol {
+  padding-left: 1.8em;
+  margin: 0.5em 0;
+}
+
+ol li {
+  margin: 3px 0;
+}
+
+/* Figures */
+figure {
+  margin: 1.5em 0;
+  text-align: center;
+  page-break-inside: avoid;
+}
+
+figure img {
+  max-width: 100%;
+  height: auto;
+  border: 2px solid #555;
+  border-radius: 4px;
+  image-rendering: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+figure img.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+figcaption {
+  color: #aaa;
+  font-size: 9pt;
+  margin-top: 6px;
+  font-style: italic;
+}
+
+figcaption a {
+  color: #ff80a0;
+}
+
+/* Works Cited */
+.works-cited p {
+  margin: 1em 0;
+  font-family: 'Roboto', sans-serif;
+  font-size: 10.5pt;
+  padding-left: 2em;
+  text-indent: -2em;
+  color: #e8e8e8;
+}
+
+/* Footer */
+.footer {
+  background-color: #111;
+  padding: 30px 20px;
+  text-align: center;
+  font-size: 9pt;
+  color: #666;
+  border-top: 1px solid #333;
+}
+
+.footer a {
+  color: #999;
+  margin: 0 8px;
+}
+.footer a:hover {
+  color: #ff80a0;
+}
+
+/* Pixel decoration */
+.pixel-divider {
+  text-align: center;
+  margin: 32px 0;
+  color: #555;
+  font-size: 8pt;
+  letter-spacing: 4px;
+}
+
+/* Responsive */
+@media screen and (max-width: 700px) {
+  .banner h1 {
+    font-size: 18pt;
+  }
+  .main-wrap {
+    padding: 20px 16px 40px;
+  }
+  figure img {
+    max-width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <h1>On Preserving PICO-8 Games</h1>
+  <div class="subtitle">Decompiling the Steganographic Encoding in PNG Images</div>
+  <div class="byline">Nicky Martin &middot; University of Illinois</div>
+</div>
+
+<div class="breadcrumb-bar">
+  <a href="https://github.com/nicky-martin/celestep8-decompiled">GitHub Repo</a>
+  <span>&rsaquo;</span>
+  <a href="#">Essay</a>
+</div>
+
+<div class="main-wrap">
+
+<p>This paper seeks to demonstrate how the game data is stored within a PICO-8 cartridge, manifested as a 128&times;128, 13KB PNG file. The file's color channels steganographically store the game data at fixed positions of the image's canvas. I conclude with a preservation strategy to preserve the virtual gaming console PICO-8.</p>
+
+<h2>Celeste PICO-8</h2>
+
+<p>For demonstration, I focused on a proof-of-concept version of <em>Celeste.</em> This prototype version was made in PICO-8 for a game jam and went on to become one of the most popular American indie video games.</p>
+
+<p>When archivists select which 2000s indie games are worthy of preservation, I predict many will include <em>Celeste.</em> An innovative, independently-developed video game that achieved mass acclaim and was lauded as a work of trans art. Awarded the Best Independent Game at the 2018 Game Awards (<a href="https://en.wikipedia.org/wiki/The_Game_Awards_2018">Wikipedia</a>), <em>Celeste</em> has sold 2.2 million units on Steam (<a href="https://app.sensortower.com/vgi/game/celeste">VGI</a>). Critics praise <em>Celeste's</em> mechanics (<a href="https://www.ign.com/articles/2018/01/25/celeste-review">IGN</a>) and narrative (<a href="https://www.gamespot.com/reviews/celeste-review-more-than-just-a-great-platformer/1900-6416843/">GameSpot</a>); the countless attempts represent the player overcoming challenges to become their truest self. This is also reflected by the creator, Maddy Thorson, and her transition journey. The game's player character is Madeline and the creator told reporters that the character is trans (<a href="https://maddymakesgames.com/articles/is_maddy_trans/index.html">Maddy Makes Games</a>). When the PICO-8 version was created, she had yet to transition.</p>
+
+<figure>
+  <a href="imgs/img1.png"><img src="imgs/img1.png" style="max-width:432px"/></a>
+  <figcaption>Figure 1: A screenshot of the Celeste credits with the creator's name properly credited, updated in 2020 (<a href="https://www.reddit.com/r/celestegame/comments/mg4hrd/they_finally_changed_the_name_d/">Reddit</a>)</figcaption>
+</figure>
+
+<p>This demo file could be compared to an artist's sketchbook or a novelist's notebook. A preservationist would need to preserve this .png so that the game is still playable for future video game historians by maintaining a pixel-perfect copy, and retain its data integrity; they also must preserve the contingent PICO-8 gaming platform, and include within the description how to run the game, as well as credit the creator's chosen name.</p>
+
+<p>Because of the game's significance, this analysis is focused on that game; however, the script should work for any PICO-8 games for the curious cryptographer.</p>
+
+<h2>Fixed Canvas Content Storage</h2>
+
+<p>The cartridge is designed to look like a Nintendo cartridge; however, the relevant data, a Lua script that runs the game, is encoded within the image's hex codes and is more significant than the visual content. The .png acts as a container, and because of a .png's lossless compression, this allows an extensible file format that is portable and well-compressed storage (<a href="https://www.w3.org/TR/png-3/">W3C</a>). Let's consider how the data embeds within the file.</p>
+
+<p>The image steganographically embeds the data into each pixel's RGBA values: red, green, blue, and alpha (transparency). Four channels are essential for extracting 2&times;4=8 bits per byte. Roberto Vaccari's blogpost demonstrates from where relevant content is extracted (<a href="https://robertovaccari.com/blog/2021_01_03_stegano_pico8/">robertovaccari.com</a>).</p>
+
+<blockquote>
+One of the most basic forms of image steganography is replacing the color channels least significant bits and store secret bits of information instead. Let's suppose that we have the following pixel in RGB format:
+<p>RGB color (139, 81, 255)</p>
+<ul>
+  <li>R: 10001011 = 139</li>
+  <li>G: 01010001 = 81</li>
+  <li>B: 11111111 = 255</li>
+</ul>
+<p>We could insert the following secret bits (101010) replacing the last two bits of each channel.</p>
+<ul>
+  <li>R: 100010<strong>10</strong> &rarr; 138</li>
+  <li>G: 010100<strong>10</strong> &rarr; 82</li>
+  <li>B: 111111<strong>10</strong> &rarr; 254</li>
+</ul>
+<p>The colors are different, but it's very hard to notice. If you were shown a picture which included the second shade of purple, it would look perfectly normal, especially if you haven't even seen the original in the first place.</p>
+</blockquote>
+
+<figure>
+  <a href="imgs/img2.png"><img src="imgs/img2.png" style="max-width:132px"/></a>
+  <figcaption>Figure 2: Color Comparison with Small Bit-Level Changes, from <a href="https://robertovaccari.com/blog/2021_01_03_stegano_pico8/">robertovaccari.com</a></figcaption>
+</figure>
+
+<p>The relevant data exists within the least-significant bits of each pixel's color channel; these eight bits form one byte of data. Once extracted from the image, PICO-8 recompiles it into the Lua script.</p>
+
+<p>Vaccari's analysis and his GitHub repository are the basis of my analysis (<a href="https://github.com/rvaccarim/p8png_decoder">GitHub</a>). This analysis deliberately overcomplicates his decompiler, a program that converts .p8.png files into Lua script, into a demonstrative program that prints out every step of the steganographic encoding to detail the extraction and decompiling steps otherwise stored, and deleted, in system memory.</p>
+
+<p>The creator of PICO-8 explains how game cartridges work: &ldquo;Instead of physical cartridges, programs made for PICO-8 are distributed on .png images that look like cartridges, complete with labels and a fixed 32k data capacity.&rdquo; (<a href="https://www.lexaloffle.com/pico-8.php?page=faq">lexaloffle</a>)</p>
+
+<p>When a .png is uploaded to PICO-8, the program:</p>
+
+<ol>
+  <li>Extracts the bits in each pixel's color channel</li>
+  <li>Adjoins them into byte strings</li>
+  <li>Translates them into decimal notation</li>
+  <li>Converts each decimal into an ASCII character</li>
+  <li>Prints the Lua script <em>and</em></li>
+  <li>Runs the script (so the user can play the game)</li>
+</ol>
+
+<p>This takes about 2 seconds, one second for steps 1&ndash;5, and another for step 6.</p>
+
+<p>The game's data is within the black rectangle that says Celeste in the middle of the image. However, the decompiling program relies on the PICO-8 cartridge file, Figure 3.</p>
+
+<figure>
+  <a href="imgs/img3.png"><img src="imgs/img3.png" class="pixel-art" style="max-width:160px"/></a>
+  <figcaption>Figure 3: PICO-8 Cartridge Image</figcaption>
+</figure>
+
+<p>The decompiler script requires the cartridge frame image because it considers the pixel positions of the file; the script is looking for a 160 &times; 205 pixel image, or 32,800 pixels of information. Remember, the games can be 32KB in capacity. PICO-8 selects pre-defined byte regions to find the encoded game data.</p>
+
+<p>From the PICO-8 Community Wiki, <a href="https://pico-8.fandom.com/wiki/P8PNGFileFormat">(pico-8.fandom.com)</a></p>
+
+<blockquote>
+<strong>&bull;</strong> The first four bytes (0x4300-0x4303) are <code>\x00pxa</code>.<br/><br/>
+<strong>&bull;</strong> The next two bytes (0x4304-0x4305) are the length of the decompressed code, stored MSB first.<br/><br/>
+<strong>&bull;</strong> The next two bytes (0x4306-0x4307) are the length of the compressed data + 8 for this 8-byte header, stored MSB first.<br/><br/>
+<strong>&bull;</strong> The remainder (0x4308-0x7fff) is the compressed data.
+</blockquote>
+
+<p>In other words, the game data is encoded within pixels of this region of Figure 4:</p>
+
+<figure>
+  <a href="imgs/img4.png"><img src="imgs/img4.png" class="pixel-art" style="max-width:128px"/></a>
+  <figcaption>Figure 4: The <em>Celeste</em> game data</figcaption>
+</figure>
+
+<h3>Bit Extraction</h3>
+
+<p>First, the decompiler script extracts bits from each four color values, as seen in <a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix1-celeste-pixelextraction.txt">Appendix 1.</a></p>
+
+<figure>
+  <a href="imgs/img5.png"><img src="imgs/img5.png" style="max-width:624px"/></a>
+  <figcaption>Figure 5: Extracted bits in each pixel (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix1-celeste-pixelextraction.txt">Appendix 1</a>)</figcaption>
+</figure>
+
+<p>Each pixel stores one byte of data. Consider that <em>Celeste</em> <strong>does not</strong> use all of its 32k tokens. Here's a screenshot of the relevant extracted data from <a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix2-celeste-meaningfulbits.txt">Appendix 2</a>, filtering out the '?'.</p>
+
+<figure>
+  <a href="imgs/img6.png"><img src="imgs/img6.png" style="max-width:576px"/></a>
+  <figcaption>Figure 6: The Extraction Filtered For Data-Rich Pixels (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix2-celeste-meaningfulbits.txt">Appendix 2</a>)</figcaption>
+</figure>
+
+<p>Once all of the bytes are reassembled, they're adjoined to output the file's bitstream, as seen in <a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix3-celeste-bitstream.txt">Appendix 3.</a></p>
+
+<figure>
+  <a href="imgs/img7.png"><img src="imgs/img7.png" style="max-width:672px"/></a>
+  <figcaption>Figure 7: PICO-8 <em>Celeste's</em> Bitstream (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix3-celeste-bitstream.txt">Appendix 3</a>)</figcaption>
+</figure>
+
+<p>The game's data at the lowest levels of computation.</p>
+
+<h3>Byte Conversion</h3>
+
+<p>The bytes are converted to decimal values corresponding to ASCII encoding, &ldquo;128 characters (control characters and graphic characters, such as letters, digits, and symbols) with their coded representation&rdquo; (<a href="http://www.bitsavers.org/pdf/ansi/X3/X3.004-1986_7-Bit_ASCII.pdf">ASCII</a>). This is why byte values do not exceed 127.</p>
+
+<figure>
+  <a href="imgs/img8.png"><img src="imgs/img8.png" style="max-width:720px"/></a>
+  <figcaption>Figure 8: Binary-Coded Decimal Strings (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix3-celeste-bitstream.txt">Appendix 3</a>)</figcaption>
+</figure>
+
+<p>With the binary-coded decimal string and an ASCII lookup table, the decompiler writes the code character by character: select string, print corresponding ASCII character or execute a command reprinting data previously printed in the file, detailed in <a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix4-celeste-decompression.txt">Appendix 4.</a></p>
+
+<p>First, we see how the decompiler writes the title,</p>
+
+<figure>
+  <a href="imgs/img9.png"><img src="imgs/img9.png" style="max-width:384px"/></a>
+  <figcaption>Figure 9: The decompiler writes the game's title (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix4-celeste-decompression.txt">Appendix 4</a>)</figcaption>
+</figure>
+
+<p>Then it continues to write the credits.</p>
+
+<figure>
+  <a href="imgs/img10.png"><img src="imgs/img10.png" style="max-width:432px"/></a>
+  <figcaption>Figure 10: The decompiler writes the game's credits (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix4-celeste-decompression.txt">Appendix 4</a>)</figcaption>
+</figure>
+
+<h3>Lua Recompilation</h3>
+
+<p>In 5,889 total steps and 26,589 bytes of data to print the entire game script in Appendix 5, abridged below:</p>
+
+<figure>
+  <a href="imgs/img11.png"><img src="imgs/img11.png" style="max-width:480px"/></a>
+  <figcaption>Figure 11: A snippet of the game's finished script (<a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix5-celeste-gamecode.txt">Appendix 5</a>)</figcaption>
+</figure>
+
+<p>With the <em>Celeste</em> code from Appendix 5, a PICO-8 user could copy/paste it into the program's IDE and run the game. This process automatically happens when a user uploads a .png game cartridge.</p>
+
+<figure>
+  <a href="imgs/img12.png"><img src="imgs/img12.png" style="max-width:528px"/></a>
+  <figcaption>Figure 12: Celeste's code in the PICO-8 IDE</figcaption>
+</figure>
+
+<p>As plain text, the game's engine takes up more file space than the game's compressed image, with the text totaling 27KB of data. All this data, plus the game's sprites and maps are compressed into the 13KB game cartridge image. Imprinting the game into an image makes it more portable, compressed and archivable.</p>
+
+<h2>Preservation Strategy</h2>
+
+<p>The PICO-8 system automates this de/encoding, so emulation is required to preserve PICO-8 and run its games. No PICO-8: no games. If we just extract the image's Lua script, we're unable to run it without the PICO-8 system dependencies.</p>
+
+<p>The PICO-8 game engine has a built in IDE, a color palette and sprite editor, map and sound engine. All of this functionality would need to be maintained for PICO-8 emulation. PICO-8 embeds art and sounds from a palette of possible assets, which does limit the amount of dependent files for preservation.</p>
+
+<p>A preservationist would need an .iso disc image of the program and its operating system. A complete file structure for archiving PICO-8 and its games would include a disc image of the operating system that can run PICO-8 and a locally hosted folder of all the p8.png game cartridges. There is no physical controller, nor is any DRM on the games, so archiving PICO-8 may have less obstacles compared to a closed-environment game system with physical devices.</p>
+
+<p>An archivist will need to preserve extensive documentation and metadata description of PICO-8. If PICO-8 source code is one day released or decompiled, the system can be continued to receive updates for new operating systems.</p>
+
+<p>There's added complexity because of how many builds are officially supported,</p>
+
+<blockquote>
+&ldquo;PICO-8 currently has builds for Mac, Windows and Linux (32, 64 bit), Raspberry Pi (32, 64 bit) and PocketCHIP.&rdquo; (<a href="https://www.lexaloffle.com/pico-8.php?page=faq">PICO-8</a>)
+</blockquote>
+
+<p>Archiving each of these operating systems, the program install files, and open-source dependencies would be required. An institution may choose to limit scope by preserving the most popular operating systems (just Windows/Mac/Linux, skip the short lived PocketC.H.I.P. OS) and rely on archival OS repositories (like ArchiveOS.org).</p>
+
+<p>Archiving solely game images would be significantly easier. The .png file is a maintained standard. A full digital preservation system would be equipped to host .png files and preserve pixel color values. A project called PICOAwesome is currently attempting to archive all of the games on the Internet Archive by scraping them from itch, but the project was stymied by copyright law (<a href="https://archive.org/details/picowesome-v1.3/pico8/%5BAction-Adventure%5D/A%20Doukutsu%20Demake.p8.png">archive.org</a>).</p>
+
+<p>Ultimately, emulation will be required for preserving these games because a PICO-8 cartridge is irrelevant when removed from the context of the program that runs it.</p>
+
+<h2>Acknowledgements</h2>
+
+<p>My analysis is an extension of Roberto Vaccari's <a href="https://robertovaccari.com/blog/2021_01_03_stegano_pico8/">blogpost</a> and <a href="https://github.com/rvaccarim/p8png_decoder">GitHub repo</a>. Anthropic's Claude helped me edit those scripts. This was originally a paper for Dr. Emily Maemura's <em>Digital Preservation</em> class at the University of Illinois, and it was influenced by curricula from two other iSchool professors, Dr. Mathew Turk's lecture on DOS game encoding in Dr. Karen Wickett's <em>Foundations of Digital Information</em>.</p>
+
+<h2>Appendices</h2>
+
+<p><a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix1-celeste-pixelextraction.txt">Appendix 1: CelesteP8 Pixel Extraction.txt</a></p>
+<p><a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix2-celeste-meaningfulbits.txt">Appendix 2: CelesteP8 Meaningful Bits.txt</a></p>
+<p><a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix3-celeste-bitstream.txt">Appendix 3: CelesteP8 Bit Byte Streams.txt</a></p>
+<p><a href="https://github.com/nicky-martin/celestep8-decompiled/blob/f01eca9201f74fdd0f6f481e0010f2ffa10d2136/appendix/appendix4-celeste-decompression.txt#L5285">Appendix 4: CelesteP8 Full Decompression.txt</a></p>
+<p><a href="https://github.com/nicky-martin/celestep8-decompiled/blob/main/appendix/appendix5-celeste-gamecode.txt">Appendix 5: CelesteP8 Full Game Code.txt</a></p>
+
+<hr style="border: none; border-top: 1px solid #555; margin: 32px 0;" />
+
+<h2>Works Cited</h2>
+
+<div class="works-cited">
+<p><em>Accessed 26 Oct. 2025.</em></p>
+<p>American National Standard for Information Systems. <em>Coded Character Sets &ndash; 7-Bit American National Standard Code for Information Interchange (7-Bit ASCII)</em>. ANSI, 1986, <a href="http://www.bitsavers.org/pdf/ansi/X3/X3.004-1986_7-Bit_ASCII.pdf">http://www.bitsavers.org/pdf/ansi/X3/X3.004-1986_7-Bit_ASCII.pdf</a>.</p>
+<p>&ldquo;Celeste &ndash; Steam Stats.&rdquo; <em>Video Game Insights</em>, <a href="https://staging1.sensortower.com/vgi">https://staging1.sensortower.com/vgi</a>.</p>
+<p>&ldquo;Celeste Review: More Than Just A Great Platformer.&rdquo; <em>GameSpot</em>, <a href="https://www.gamespot.com/reviews/celeste-review-more-than-just-a-great-platformer/1900-6416843/">https://www.gamespot.com/reviews/celeste-review-more-than-just-a-great-platformer/1900-6416843/</a>.</p>
+<p>Claude. &ldquo;Decompiling Celeste game code&rdquo; Anthropic, 26 Oct. 2025, <a href="http://claude.ai/">claude.ai</a>. Large language model.</p>
+<p>&ldquo;Is Madeline Canonically Trans?&rdquo; <em>Maddy Makes Games</em>, <a href="https://maddymakesgames.com/articles/is_maddy_trans/index.html">https://maddymakesgames.com/articles/is_maddy_trans/index.html</a>.</p>
+<p>Marks, Tom. &ldquo;Celeste Review.&rdquo; <em>IGN</em>, 25 Jan. 2018, <a href="https://www.ign.com/articles/2018/01/25/celeste-review">https://www.ign.com/articles/2018/01/25/celeste-review</a>.</p>
+<p>&ldquo;P8PNGFileFormat.&rdquo; <em>PICO-8 Wiki</em>, <a href="https://pico-8.fandom.com/wiki/P8PNGFileFormat">https://pico-8.fandom.com/wiki/P8PNGFileFormat</a>.</p>
+<p><em>PICO-8 Fantasy Console</em>. <a href="https://www.lexaloffle.com/pico-8.php?page=faq">https://www.lexaloffle.com/pico-8.php?page=faq</a>.</p>
+<p>RandomInSpace. &ldquo;They finally changed the name :D.&rdquo; Reddit Post. <em>R/Celestegame</em>, 30 Mar. 2021, <a href="https://www.reddit.com/r/celestegame/comments/mg4hrd/they_finally_changed_the_name_d/">https://www.reddit.com/r/celestegame/comments/mg4hrd/they_finally_changed_the_name_d/</a>.</p>
+<p>rvaccarim. <em>Rvaccarim/P8png_decoder</em>. 3 Jan. 2021, Python. 23 Jan. 2024. <em>GitHub</em>, <a href="https://github.com/rvaccarim/p8png_decoder">https://github.com/rvaccarim/p8png_decoder</a>.</p>
+<p>&ldquo;The Game Awards 2018.&rdquo; <em>Wikipedia</em>, 15 Aug. 2025. <em>Wikipedia</em>, <a href="https://en.wikipedia.org/w/index.php?title=The_Game_Awards_2018&amp;oldid=1305985151">https://en.wikipedia.org/w/index.php?title=The_Game_Awards_2018&amp;oldid=1305985151</a>.</p>
+<p>u/Voljega. <em>PICOwesome v1.3 (Feb-28-2022)</em>. 28 Feb. 2022. <em>Internet Archive</em>, <a href="http://archive.org/details/picowesome-v1.3">http://archive.org/details/picowesome-v1.3</a>.</p>
+<p>Vaccari, Roberto. <em>Steganography: Decoding Pico-8 Cartridges</em>. 3 Jan. 2021, <a href="https://robertovaccari.com/blog/2021_01_03_stegano_pico8/">https://robertovaccari.com/blog/2021_01_03_stegano_pico8/</a>.</p>
+<p>World Wide Web Consortium. <em>Portable Network Graphics (PNG) Specification (Third Edition)</em>. W3C, 24 June 2025, <a href="https://www.w3.org/TR/png-3/">https://www.w3.org/TR/png-3/</a>.</p>
+</div>
+
+</div>
+
+<div class="footer">
+  <a href="https://github.com/nicky-martin/celestep8-decompiled">GitHub</a> |
+  <a href="https://www.lexaloffle.com/pico-8.php">PICO-8</a>
+  <br/><br/>
+  <span style="color:#555">PICO-8 is a fantasy console by Lexaloffle Games</span>
+</div>
+
+</body>
+</html>
